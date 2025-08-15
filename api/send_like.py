@@ -90,7 +90,7 @@ def send_like():
 
     # جلب معلومات اللاعب من الرابط الجديد
     try:
-        info_url = f"https://infor-bngx-ff.vercel.app/get?uid={player_id}"
+        info_url = f"https://infoplayerbngx-pi.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
         if resp.status_code != 200:
             return jsonify({"error": "Failed to fetch player info"}), 500
