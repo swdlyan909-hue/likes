@@ -12,9 +12,8 @@ app = Flask(__name__)
 last_sent_cache = {}
 lock = threading.Lock()
 
-# تخزين استخدام التوكنات (يوميًا)
+# تتبع استخدام التوكنات بشكل يومي (لكل UID)
 token_usage = {}  # { uid: {"count": int, "last_reset": timestamp} }
-daily_limit_cache = {}  # { uid: timestamp متى وصل limit }
 
 def reset_if_needed(uid):
     now = time.time()
@@ -32,16 +31,7 @@ def increment_usage(uid):
 
 def can_use_token(uid):
     usage = reset_if_needed(uid)
-
-    # التحقق من daily_limit
-    now = time.time()
-    if uid in daily_limit_cache:
-        if now - daily_limit_cache[uid] < 86400:  # لم يمر يوم كامل
-            return False
-        else:
-            del daily_limit_cache[uid]  # انتهت المدة نسمح بالاستعمال
-
-    return usage["count"] < 100
+    return usage["count"] < 100   # التوكن مسموح إلى أن يستعمل 100 مرة باليوم
 
 def Encrypt_ID(x):
     x = int(x)
@@ -96,11 +86,10 @@ def send_like_request(token, TARGET, uid):
                 if stats.get("success") is True:
                     return {"token": token[:20] + "...", "status": "success"}
                 elif stats.get("daily_limited_reached") is True:
-                    # نخزن متى وصل limit
-                    daily_limit_cache[uid] = time.time()
+                    # نتجاهل التوكن فقط (مافيش كاش)
                     return {"token": token[:20] + "...", "status": "daily_limit"}
                 else:
-                    return {"token": token[:20] + "...", "status": "failed (not applied)"}
+                    return {"token": token[:20] + "...", "status": "failed"}
             except Exception:
                 return {"token": token[:20] + "...", "status": "invalid_response"}
         else:
@@ -119,20 +108,20 @@ def send_like():
     except ValueError:
         return jsonify({"error": "player_id must be an integer"}), 400
 
+    # تحقق من إرسال لايك لنفس الحساب خلال 24 ساعة
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
-    seconds_since_last = now - last_sent
-    if seconds_since_last < 86400:
-        remaining = int(86400 - seconds_since_last)
-        return jsonify({"error": "Likes already sent within last 24 hours",
-                        "seconds_until_next_allowed": remaining}), 429
+    if now - last_sent < 86400:
+        remaining = int(86400 - (now - last_sent))
+        return jsonify({
+            "error": "Likes already sent within last 24 hours",
+            "seconds_until_next_allowed": remaining
+        }), 429
 
-    # player info
+    # جلب معلومات اللاعب
     try:
         info_url = f"https://infoplayerbngx-pi.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
-        if resp.status_code != 200:
-            return jsonify({"error": "Failed to fetch player info"}), 500
         info_json = resp.json()
         account_info = info_json.get("AccountInfo", {})
         player_name = account_info.get("AccountName", "Unknown")
@@ -141,17 +130,18 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
-    # tokens
+    # جلب كل التوكنات من الرابط
     try:
         token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=15).json()
         tokens_dict = token_data.get("tokens", {})
         if not tokens_dict:
             return jsonify({"error": "No tokens found"}), 500
-        token_items = list(tokens_dict.items())  # [(uid, token), ...]
+        token_items = list(tokens_dict.items())
         random.shuffle(token_items)
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
+    # تجهيز البيانات
     encrypted_id = Encrypt_ID(player_uid)
     encrypted_api_data = encrypt_api(f"08{encrypted_id}1007")
     TARGET = bytes.fromhex(encrypted_api_data)
@@ -168,13 +158,11 @@ def send_like():
             if likes_sent >= max_likes:
                 return None
         res = send_like_request(token, TARGET, uid)
-
         if res["status"] == "success":
             with lock:
                 if likes_sent < max_likes:
                     likes_sent += 1
                     increment_usage(uid)
-                    return res
         return res
 
     with ThreadPoolExecutor(max_workers=1000) as executor:
