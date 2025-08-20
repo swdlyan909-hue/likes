@@ -80,7 +80,17 @@ def send_like_request(token, TARGET):
     try:
         resp = httpx.post(url, headers=headers, data=TARGET, verify=False, timeout=10)
         if resp.status_code == 200:
-            return {"token": token[:20] + "...", "status": "success"}
+            try:
+                data = resp.json()
+                stats = data.get("stats", {})
+                if stats.get("success") is True:
+                    return {"token": token[:20] + "...", "status": "success"}
+                elif stats.get("daily_limited_reached") is True:
+                    return {"token": token[:20] + "...", "status": "daily_limit"}
+                else:
+                    return {"token": token[:20] + "...", "status": "failed (not applied)"}
+            except Exception:
+                return {"token": token[:20] + "...", "status": "invalid_response"}
         else:
             return {"token": token[:20] + "...", "status": f"failed ({resp.status_code})"}
     except httpx.RequestError as e:
@@ -146,13 +156,15 @@ def send_like():
             if likes_sent >= max_likes:
                 return None
         res = send_like_request(token, TARGET)
-        if "success" in res["status"]:
+
+        # نحسب فقط إذا السيرفر قال success
+        if res["status"] == "success":
             with lock:
                 if likes_sent < max_likes:
                     likes_sent += 1
                     increment_usage(uid)
                     return res
-        return None
+        return res  # نرجع الرد حتى لو مو success
 
     with ThreadPoolExecutor(max_workers=40) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
