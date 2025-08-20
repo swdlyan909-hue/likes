@@ -177,7 +177,7 @@ def send_like():
                     return res
         return res
 
-    with ThreadPoolExecutor(max_workers=40) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
         for future in futures:
             result = future.result()
