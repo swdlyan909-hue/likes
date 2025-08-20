@@ -78,7 +78,13 @@ def send_like_request(token, TARGET, uid):
         'Authorization': f'Bearer {token}'
     }
     try:
-        resp = httpx.post(url, headers=headers, data=TARGET, verify=False, timeout=10)
+        # جرب نرسل بالهيكس كنص
+        resp = httpx.post(url, headers=headers, data={"data": TARGET.hex()}, verify=False, timeout=10)
+        print("\n===== RAW RESPONSE =====")
+        print("STATUS:", resp.status_code)
+        print("TEXT:", resp.text[:500])   # نطبع أول 500 حرف
+        print("========================\n")
+
         if resp.status_code == 200:
             try:
                 data = resp.json()
@@ -86,17 +92,15 @@ def send_like_request(token, TARGET, uid):
                 if stats.get("success") is True:
                     return {"token": token[:20] + "...", "status": "success"}
                 elif stats.get("daily_limited_reached") is True:
-                    # نتجاهل التوكن فقط (مافيش كاش)
                     return {"token": token[:20] + "...", "status": "daily_limit"}
                 else:
-                    return {"token": token[:20] + "...", "status": "failed"}
+                    return {"token": token[:20] + "...", "status": f"failed_json {data}"}
             except Exception:
-                return {"token": token[:20] + "...", "status": "invalid_response"}
+                return {"token": token[:20] + "...", "status": f"not_json {resp.text[:100]}"}
         else:
-            return {"token": token[:20] + "...", "status": f"failed ({resp.status_code})"}
+            return {"token": token[:20] + "...", "status": f"failed ({resp.status_code}) {resp.text[:100]}"}
     except httpx.RequestError as e:
         return {"token": token[:20] + "...", "status": f"error ({e})"}
-
 @app.route("/send_like", methods=["GET"])
 def send_like():
     player_id = request.args.get("player_id")
