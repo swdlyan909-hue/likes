@@ -132,7 +132,7 @@ def send_like():
 
     # جلب كل التوكنات من الرابط
     try:
-        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=15).json()
+        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=20).json()
         tokens_dict = token_data.get("tokens", {})
         if not tokens_dict:
             return jsonify({"error": "No tokens found"}), 500
@@ -165,7 +165,7 @@ def send_like():
                     increment_usage(uid)
         return res
 
-    with ThreadPoolExecutor(max_workers=1000) as executor:
+    with ThreadPoolExecutor(max_workers=900) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
         for future in futures:
             result = future.result()
