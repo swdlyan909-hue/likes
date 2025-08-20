@@ -14,6 +14,7 @@ lock = threading.Lock()
 
 # تخزين استخدام التوكنات (يوميًا)
 token_usage = {}  # { uid: {"count": int, "last_reset": timestamp} }
+daily_limit_cache = {}  # { uid: timestamp متى وصل limit }
 
 def reset_if_needed(uid):
     now = time.time()
@@ -31,6 +32,15 @@ def increment_usage(uid):
 
 def can_use_token(uid):
     usage = reset_if_needed(uid)
+
+    # التحقق من daily_limit
+    now = time.time()
+    if uid in daily_limit_cache:
+        if now - daily_limit_cache[uid] < 86400:  # لم يمر يوم كامل
+            return False
+        else:
+            del daily_limit_cache[uid]  # انتهت المدة نسمح بالاستعمال
+
     return usage["count"] < 100
 
 def Encrypt_ID(x):
@@ -65,7 +75,7 @@ def encrypt_api(plain_text):
     cipher_text = cipher.encrypt(pad(plain_text, AES.block_size))
     return cipher_text.hex()
 
-def send_like_request(token, TARGET):
+def send_like_request(token, TARGET, uid):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
     headers = {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)',
@@ -80,7 +90,19 @@ def send_like_request(token, TARGET):
     try:
         resp = httpx.post(url, headers=headers, data=TARGET, verify=False, timeout=10)
         if resp.status_code == 200:
-            return {"token": token[:20] + "...", "status": "success"}
+            try:
+                data = resp.json()
+                stats = data.get("stats", {})
+                if stats.get("success") is True:
+                    return {"token": token[:20] + "...", "status": "success"}
+                elif stats.get("daily_limited_reached") is True:
+                    # نخزن متى وصل limit
+                    daily_limit_cache[uid] = time.time()
+                    return {"token": token[:20] + "...", "status": "daily_limit"}
+                else:
+                    return {"token": token[:20] + "...", "status": "failed (not applied)"}
+            except Exception:
+                return {"token": token[:20] + "...", "status": "invalid_response"}
         else:
             return {"token": token[:20] + "...", "status": f"failed ({resp.status_code})"}
     except httpx.RequestError as e:
@@ -145,14 +167,15 @@ def send_like():
         with lock:
             if likes_sent >= max_likes:
                 return None
-        res = send_like_request(token, TARGET)
-        if "success" in res["status"]:
+        res = send_like_request(token, TARGET, uid)
+
+        if res["status"] == "success":
             with lock:
                 if likes_sent < max_likes:
                     likes_sent += 1
                     increment_usage(uid)
                     return res
-        return None
+        return res
 
     with ThreadPoolExecutor(max_workers=40) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
