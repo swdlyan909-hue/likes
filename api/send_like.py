@@ -12,7 +12,7 @@ app = Flask(__name__)
 last_sent_cache = {}
 lock = threading.Lock()
 
-# تتبع استخدام التوكنات بشكل يومي (لكل UID)
+# تخزين استخدام التوكنات (يوميًا)
 token_usage = {}  # { uid: {"count": int, "last_reset": timestamp} }
 
 def reset_if_needed(uid):
@@ -31,7 +31,7 @@ def increment_usage(uid):
 
 def can_use_token(uid):
     usage = reset_if_needed(uid)
-    return usage["count"] < 100   # التوكن مسموح إلى أن يستعمل 100 مرة باليوم
+    return usage["count"] < 100
 
 def Encrypt_ID(x):
     x = int(x)
@@ -65,7 +65,7 @@ def encrypt_api(plain_text):
     cipher_text = cipher.encrypt(pad(plain_text, AES.block_size))
     return cipher_text.hex()
 
-def send_like_request(token, TARGET, uid):
+def send_like_request(token, TARGET):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
     headers = {
         'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 9; ASUS_Z01QD Build/PI)',
@@ -78,29 +78,14 @@ def send_like_request(token, TARGET, uid):
         'Authorization': f'Bearer {token}'
     }
     try:
-        # جرب نرسل بالهيكس كنص
-        resp = httpx.post(url, headers=headers, data={"data": TARGET.hex()}, verify=False, timeout=10)
-        print("\n===== RAW RESPONSE =====")
-        print("STATUS:", resp.status_code)
-        print("TEXT:", resp.text[:500])   # نطبع أول 500 حرف
-        print("========================\n")
-
+        resp = httpx.post(url, headers=headers, data=TARGET, verify=False, timeout=10)
         if resp.status_code == 200:
-            try:
-                data = resp.json()
-                stats = data.get("stats", {})
-                if stats.get("success") is True:
-                    return {"token": token[:20] + "...", "status": "success"}
-                elif stats.get("daily_limited_reached") is True:
-                    return {"token": token[:20] + "...", "status": "daily_limit"}
-                else:
-                    return {"token": token[:20] + "...", "status": f"failed_json {data}"}
-            except Exception:
-                return {"token": token[:20] + "...", "status": f"not_json {resp.text[:100]}"}
+            return {"token": token[:20] + "...", "status": "success"}
         else:
-            return {"token": token[:20] + "...", "status": f"failed ({resp.status_code}) {resp.text[:100]}"}
+            return {"token": token[:20] + "...", "status": f"failed ({resp.status_code})"}
     except httpx.RequestError as e:
         return {"token": token[:20] + "...", "status": f"error ({e})"}
+
 @app.route("/send_like", methods=["GET"])
 def send_like():
     player_id = request.args.get("player_id")
@@ -112,20 +97,20 @@ def send_like():
     except ValueError:
         return jsonify({"error": "player_id must be an integer"}), 400
 
-    # تحقق من إرسال لايك لنفس الحساب خلال 24 ساعة
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
-    if now - last_sent < 86400:
-        remaining = int(86400 - (now - last_sent))
-        return jsonify({
-            "error": "Likes already sent within last 24 hours",
-            "seconds_until_next_allowed": remaining
-        }), 429
+    seconds_since_last = now - last_sent
+    if seconds_since_last < 86400:
+        remaining = int(86400 - seconds_since_last)
+        return jsonify({"error": "Likes already sent within last 24 hours",
+                        "seconds_until_next_allowed": remaining}), 429
 
-    # جلب معلومات اللاعب
+    # player info
     try:
         info_url = f"https://infoplayerbngx-pi.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
+        if resp.status_code != 200:
+            return jsonify({"error": "Failed to fetch player info"}), 500
         info_json = resp.json()
         account_info = info_json.get("AccountInfo", {})
         player_name = account_info.get("AccountName", "Unknown")
@@ -134,18 +119,17 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
-    # جلب كل التوكنات من الرابط
+    # tokens
     try:
-        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=20).json()
+        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=15).json()
         tokens_dict = token_data.get("tokens", {})
         if not tokens_dict:
             return jsonify({"error": "No tokens found"}), 500
-        token_items = list(tokens_dict.items())
+        token_items = list(tokens_dict.items())  # [(uid, token), ...]
         random.shuffle(token_items)
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # تجهيز البيانات
     encrypted_id = Encrypt_ID(player_uid)
     encrypted_api_data = encrypt_api(f"08{encrypted_id}1007")
     TARGET = bytes.fromhex(encrypted_api_data)
@@ -161,15 +145,16 @@ def send_like():
         with lock:
             if likes_sent >= max_likes:
                 return None
-        res = send_like_request(token, TARGET, uid)
-        if res["status"] == "success":
+        res = send_like_request(token, TARGET)
+        if "success" in res["status"]:
             with lock:
                 if likes_sent < max_likes:
                     likes_sent += 1
                     increment_usage(uid)
-        return res
+                    return res
+        return None
 
-    with ThreadPoolExecutor(max_workers=1200) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
         for future in futures:
             result = future.result()
