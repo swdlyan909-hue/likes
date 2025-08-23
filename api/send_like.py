@@ -121,7 +121,7 @@ def send_like():
 
     # tokens
     try:
-        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=15).json()
+        token_data = httpx.get("https://auto-token-bngx.onrender.com/api/get_jwt", timeout=25).json()
         tokens_dict = token_data.get("tokens", {})
         if not tokens_dict:
             return jsonify({"error": "No tokens found"}), 500
@@ -154,7 +154,7 @@ def send_like():
                     return res
         return None
 
-    with ThreadPoolExecutor(max_workers=40) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = [executor.submit(worker, uid, token) for uid, token in token_items]
         for future in futures:
             result = future.result()
