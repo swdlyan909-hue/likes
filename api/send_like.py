@@ -126,13 +126,13 @@ def send_like():
     results = []
     failed = []
 
-    # ✅ جلب 1000 توكن بشكل عشوائي
+    # ✅ جلب 100 توكن فقط بشكل عشوائي
     try:
         token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
         tokens_dict = token_data.get("tokens", {})
         token_items = list(tokens_dict.items())
         random.shuffle(token_items)
-        token_items = token_items[:100]  # <-- 1000 توكن عشوائي
+        token_items = token_items[:100]  # <-- 100 توكن فقط
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
@@ -145,13 +145,19 @@ def send_like():
             res = future.result()
             if res["status_code"] == 200:
                 with lock:
-                    likes_sent += 1  # ✅ عدد اللايكات الناجحة يعتمد على التوكنات التي نجحت فعليًا
+                    likes_sent += 1
                     results.append(res)
             else:
                 failed.append(res)
 
     last_sent_cache[player_id_int] = now
     likes_after = likes_before + likes_sent
+
+    # إذا لم تنجح أي توكنات، اعتبر أن الحد اليومي تم الوصول إليه
+    if likes_sent == 0:
+        message = "Daily like limit reached or no valid tokens available."
+    else:
+        message = None
 
     return jsonify({
         "player_id": player_uid,
@@ -160,6 +166,7 @@ def send_like():
         "likes_added": likes_sent,
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
+        "message": message,
         "success_tokens": results,
         "failed_tokens": failed
     })
