@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import httpx
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import random
 import time
 import threading
@@ -22,16 +22,15 @@ def Encrypt_ID(x):
         if x > 128:
             x = x / 128
             if x > 128:
-                x = x / 128
                 strx = int(x)
-                y = (x - int(strx)) * 128
+                y = (x - strx) * 128
                 z = (y - int(y)) * 128
                 n = (z - int(z)) * 128
                 m = (n - int(n)) * 128
                 return dec[int(m)] + dec[int(n)] + dec[int(z)] + dec[int(y)] + xxx[int(x)]
             else:
                 strx = int(x)
-                y = (x - int(strx)) * 128
+                y = (x - strx) * 128
                 z = (y - int(y)) * 128
                 n = (z - int(z)) * 128
                 return dec[int(n)] + dec[int(z)] + dec[int(y)] + xxx[int(x)]
@@ -105,46 +104,41 @@ def send_like():
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
     encrypted_id = Encrypt_ID(player_uid)
+
     likes_sent = 0
     results = []
     failed = []
     max_likes = 100
+    used_tokens = set()
 
-    # جلب 200 توكن عشوائي
-    try:
-        token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
-        tokens_dict = token_data.get("tokens", {})
-        token_items = list(tokens_dict.items())
-        random.shuffle(token_items)
-        token_items = token_items[:200]
-    except Exception as e:
-        return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
+    # دالة لجلب التوكنات الجديدة
+    def fetch_tokens():
+        try:
+            token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
+            tokens_dict = token_data.get("tokens", {})
+            token_items = list(tokens_dict.items())
+            random.shuffle(token_items)
+            return [(uid, tok) for uid, tok in token_items if tok not in used_tokens]
+        except:
+            return []
 
-    # اختبار صلاحية التوكنات قبل الاستخدام
-    valid_tokens = []
-    for uid, token in token_items:
-        encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")  # لايك واحد لكل اختبار
-        TARGET = bytes.fromhex(encrypted_api_data)
-        test_resp = send_like_request(token, TARGET)
-        if test_resp["status_code"] == 200:
-            valid_tokens.append((uid, token))
-        else:
-            failed.append(test_resp)
+    tokens_queue = fetch_tokens()[:200]
 
-    # إرسال اللايكات باستخدام التوكنات الصالحة فقط
-    with ThreadPoolExecutor(max_workers=200) as executor:
-        futures = {}
-        for uid, token in valid_tokens:
-            if likes_sent >= max_likes:
-                break
+    # إرسال اللايكات مع جلب توكنات إضافية عند الحاجة
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        while likes_sent < max_likes:
+            if not tokens_queue:
+                tokens_queue = fetch_tokens()[:200]
+                if not tokens_queue:
+                    break  # لا تبقى أي توكن صالح
+
+            uid, token = tokens_queue.pop()
+            used_tokens.add(token)
             encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")
             TARGET = bytes.fromhex(encrypted_api_data)
-            futures[executor.submit(send_like_request, token, TARGET)] = token
-
-        for future in as_completed(futures):
-            if likes_sent >= max_likes:
-                break
+            future = executor.submit(send_like_request, token, TARGET)
             res = future.result()
+
             if res["status_code"] == 200:
                 with lock:
                     likes_sent += 1
@@ -159,7 +153,7 @@ def send_like():
         "player_id": player_uid,
         "player_name": player_name,
         "likes_before": likes_before,
-        "likes_added": likes_sent,  # العدد الحقيقي فقط
+        "likes_added": likes_sent,
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
         "success_tokens": results,
