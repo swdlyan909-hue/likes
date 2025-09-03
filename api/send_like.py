@@ -44,7 +44,6 @@ def encrypt_api(plain_text):
     cipher_text = cipher.encrypt(pad(plain_text, AES.block_size))
     return cipher_text.hex()
 
-# ------------------- إرسال لايك -------------------
 def send_like_request(token, TARGET):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
     headers = {
@@ -75,9 +74,8 @@ def send_like_request(token, TARGET):
             "response_text": str(e)
         }
 
-# ------------------- API Flask -------------------
-@app.route("/send_like", methods=["GET"])
-def send_like():
+@app.route("/", methods=["GET"])
+def main():
     player_id = request.args.get("player_id")
     if not player_id:
         return jsonify({"error": "player_id is required"}), 400
@@ -94,7 +92,6 @@ def send_like():
             "seconds_until_next_allowed": int(86400 - (now - last_sent))
         }), 429
 
-    # جلب معلومات اللاعب
     try:
         info_url = f"https://info-navy.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
@@ -142,7 +139,6 @@ def send_like():
                     failed.append(res)
 
         if new_success == 0:
-            # لم ينجح أي توكن من هذه الدفعة → الحد اليومي
             break
 
     last_sent_cache[player_id_int] = now
@@ -164,5 +160,7 @@ def send_like():
 
     return jsonify(response)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+# ---------------------------------
+# لجعل Flask يعمل على Vercel Serverless
+def handler(environ, start_response):
+    return app(environ, start_response)
