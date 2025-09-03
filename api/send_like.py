@@ -44,6 +44,7 @@ def encrypt_api(plain_text):
     cipher_text = cipher.encrypt(pad(plain_text, AES.block_size))
     return cipher_text.hex()
 
+# ------------------- إرسال لايك -------------------
 def send_like_request(token, TARGET):
     url = "https://clientbp.ggblueshark.com/LikeProfile"
     headers = {
@@ -74,8 +75,9 @@ def send_like_request(token, TARGET):
             "response_text": str(e)
         }
 
-@app.route("/", methods=["GET"])
-def main():
+# ------------------- API Flask -------------------
+@app.route("/send_like", methods=["GET"])
+def send_like():
     player_id = request.args.get("player_id")
     if not player_id:
         return jsonify({"error": "player_id is required"}), 400
@@ -87,11 +89,10 @@ def main():
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
     if now - last_sent < 86400:
-        return jsonify({
-            "error": "Likes already sent within last 24 hours",
-            "seconds_until_next_allowed": int(86400 - (now - last_sent))
-        }), 429
+        return jsonify({"error": "Likes already sent within last 24 hours",
+                        "seconds_until_next_allowed": int(86400 - (now - last_sent))}), 429
 
+    # جلب معلومات اللاعب
     try:
         info_url = f"https://info-navy.vercel.app/get?uid={player_id}"
         resp = httpx.get(info_url, timeout=10)
@@ -110,57 +111,48 @@ def main():
     likes_sent = 0
     results = []
     failed = []
-    max_likes = 100
+    max_likes = 100  # ✅ الحد الأقصى للايكات
 
-    while likes_sent < max_likes:
-        try:
-            token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
-            tokens_dict = token_data.get("tokens", {})
-            if not tokens_dict:
-                break
-            token_items = list(tokens_dict.items())
-            random.shuffle(token_items)
-        except Exception as e:
-            return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
+    # ✅ جلب 200 توكن عشوائي
+    try:
+        token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
+        tokens_dict = token_data.get("tokens", {})
+        token_items = list(tokens_dict.items())
+        random.shuffle(token_items)
+        token_items = token_items[:200]
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-        new_success = 0
-        with ThreadPoolExecutor(max_workers=200) as executor:
-            futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
-                       for uid, token in token_items}
-            for future in as_completed(futures):
-                uid, token = futures[future]
-                res = future.result()
-                if res["status_code"] == 200:
+    # ✅ إرسال اللايكات مع الحد الأقصى
+    with ThreadPoolExecutor(max_workers=200) as executor:
+        futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
+                   for uid, token in token_items}
+        for future in as_completed(futures):
+            if likes_sent >= max_likes:
+                break  # وصلنا الحد الأقصى
+            uid, token = futures[future]
+            res = future.result()
+            if res["status_code"] == 200:
+                with lock:
                     if likes_sent < max_likes:
                         likes_sent += 1
-                        new_success += 1
                         results.append(res)
-                else:
-                    failed.append(res)
-
-        if new_success == 0:
-            break
+            else:
+                failed.append(res)
 
     last_sent_cache[player_id_int] = now
     likes_after = likes_before + likes_sent
 
-    response = {
+    return jsonify({
         "player_id": player_uid,
         "player_name": player_name,
         "likes_before": likes_before,
-        "likes_added": likes_sent,
+        "likes_added": likes_sent,  # ✅ العدد الحقيقي
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
         "success_tokens": results,
         "failed_tokens": failed
-    }
+    })
 
-    if likes_sent == 0:
-        response["error"] = "Daily limit reached or all tokens failed"
-
-    return jsonify(response)
-
-# ---------------------------------
-# لجعل Flask يعمل على Vercel Serverless
-def handler(environ, start_response):
-    return app(environ, start_response)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
