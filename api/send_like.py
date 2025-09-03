@@ -105,13 +105,11 @@ def send_like():
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
     encrypted_id = Encrypt_ID(player_uid)
-    encrypted_api_data = encrypt_api(f"08{encrypted_id}1007")
-    TARGET = bytes.fromhex(encrypted_api_data)
 
     likes_sent = 0
     results = []
     failed = []
-    max_likes = 100  # ✅ الحد الأقصى للايكات
+    max_likes = 100  # الحد الأقصى للايكات
 
     # ✅ جلب 200 توكن عشوائي
     try:
@@ -123,20 +121,24 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # ✅ إرسال اللايكات مع الحد الأقصى
+    # ✅ إرسال اللايكات، كل توكن يرسل لايك واحد
     with ThreadPoolExecutor(max_workers=200) as executor:
-        futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
-                   for uid, token in token_items}
+        futures = {}
+        for uid, token in token_items:
+            if likes_sent >= max_likes:
+                break
+            encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")  # كل طلب لايك واحد
+            TARGET = bytes.fromhex(encrypted_api_data)
+            futures[executor.submit(send_like_request, token, TARGET)] = token
+
         for future in as_completed(futures):
             if likes_sent >= max_likes:
-                break  # وصلنا الحد الأقصى
-            uid, token = futures[future]
+                break
             res = future.result()
             if res["status_code"] == 200:
                 with lock:
-                    if likes_sent < max_likes:
-                        likes_sent += 1
-                        results.append(res)
+                    likes_sent += 1
+                    results.append(res)
             else:
                 failed.append(res)
 
@@ -147,7 +149,7 @@ def send_like():
         "player_id": player_uid,
         "player_name": player_name,
         "likes_before": likes_before,
-        "likes_added": likes_sent,  # ✅ العدد الحقيقي
+        "likes_added": likes_sent,  # العدد الحقيقي فقط
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
         "success_tokens": results,
