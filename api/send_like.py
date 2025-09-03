@@ -105,13 +105,12 @@ def send_like():
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
     encrypted_id = Encrypt_ID(player_uid)
-
     likes_sent = 0
     results = []
     failed = []
-    max_likes = 100  # الحد الأقصى للايكات
+    max_likes = 100
 
-    # ✅ جلب 200 توكن عشوائي
+    # جلب 200 توكن عشوائي
     try:
         token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
         tokens_dict = token_data.get("tokens", {})
@@ -121,13 +120,24 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # ✅ إرسال اللايكات، كل توكن يرسل لايك واحد
+    # اختبار صلاحية التوكنات قبل الاستخدام
+    valid_tokens = []
+    for uid, token in token_items:
+        encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")  # لايك واحد لكل اختبار
+        TARGET = bytes.fromhex(encrypted_api_data)
+        test_resp = send_like_request(token, TARGET)
+        if test_resp["status_code"] == 200:
+            valid_tokens.append((uid, token))
+        else:
+            failed.append(test_resp)
+
+    # إرسال اللايكات باستخدام التوكنات الصالحة فقط
     with ThreadPoolExecutor(max_workers=200) as executor:
         futures = {}
-        for uid, token in token_items:
+        for uid, token in valid_tokens:
             if likes_sent >= max_likes:
                 break
-            encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")  # كل طلب لايك واحد
+            encrypted_api_data = encrypt_api(f"08{encrypted_id}0107")
             TARGET = bytes.fromhex(encrypted_api_data)
             futures[executor.submit(send_like_request, token, TARGET)] = token
 
