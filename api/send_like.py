@@ -127,14 +127,14 @@ def send_like():
     results = []
     failed = []
 
-    # حلقة لإعادة جلب التوكنات وإرسال اللايكات حتى نصل 100 نجاح
+    # حلقة مستمرة حتى نصل 100 لايك ناجح
     while likes_sent < 100:
         try:
             token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
             tokens_dict = token_data.get("tokens", {})
             token_items = list(tokens_dict.items())
             random.shuffle(token_items)
-            token_items = token_items[:100]  # 100 توكن فقط في كل مرة
+            token_items = token_items[:100]  # 100 توكن جديدة في كل دورة
         except Exception as e:
             return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
