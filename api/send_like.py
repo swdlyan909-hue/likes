@@ -133,7 +133,7 @@ def send_like():
         tokens_dict = token_data.get("tokens", {})
         token_items = list(tokens_dict.items())
         random.shuffle(token_items)
-        token_items = token_items[:1000]
+        token_items = token_items[:2000]
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
@@ -142,7 +142,7 @@ def send_like():
         futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                    for uid, token in token_items}
         for future in as_completed(futures):
-            if likes_sent >= 300:
+            if likes_sent >= 100:
                 break
             uid, token = futures[future]
             res = future.result()
