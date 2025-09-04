@@ -103,8 +103,7 @@ def send_like():
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
     if now - last_sent < 86400:
-        return jsonify({"error": "Likes already sent within last 24 hours",
-                        "seconds_until_next_allowed": int(86400 - (now - last_sent))}), 429
+        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
 
     # جلب معلومات اللاعب قبل الإرسال
     try:
@@ -136,12 +135,12 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # ✅ إرسال لايكات حتى نصل 120 نجاح
+    # ✅ إرسال لايكات حتى نصل 150 نجاح
     with ThreadPoolExecutor(max_workers=200) as executor:
         futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                    for uid, token in token_items}
         for future in as_completed(futures):
-            if likes_sent >= 120:
+            if likes_sent >= 150:
                 break
             uid, token = futures[future]
             res = future.result()
@@ -165,11 +164,12 @@ def send_like():
 
     likes_added = likes_after - likes_before  # الفرق الفعلي بين بعد و قبل
 
-    message = None
     if likes_added == 0:
-        message = "لقد وصل الحساب للحد اليومي."
-    elif likes_added < 120:
-        message = f"تم إرسال {likes_added} لايك فقط من أصل 120."
+        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
+
+    message = None
+    if likes_added < 150:
+        message = f"تم إرسال {likes_added} لايك فقط من أصل 150."
 
     return jsonify({
         "player_id": player_uid,
