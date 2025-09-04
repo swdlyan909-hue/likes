@@ -127,31 +127,31 @@ def send_like():
     results = []
     failed = []
 
-    # جلب 1000 توكن عشوائي
-    try:
-        token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
-        tokens_dict = token_data.get("tokens", {})
-        token_items = list(tokens_dict.items())
-        random.shuffle(token_items)
-        token_items = token_items[:3500]
-    except Exception as e:
-        return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
+    # حلقة لإعادة جلب التوكنات وإرسال اللايكات حتى نصل 100 نجاح
+    while likes_sent < 100:
+        try:
+            token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
+            tokens_dict = token_data.get("tokens", {})
+            token_items = list(tokens_dict.items())
+            random.shuffle(token_items)
+            token_items = token_items[:100]  # 100 توكن فقط في كل مرة
+        except Exception as e:
+            return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # إرسال لايكات حتى نصل 150 نجاح فعلي
-    with ThreadPoolExecutor(max_workers=3500) as executor:
-        futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
-                   for uid, token in token_items}
-        for future in as_completed(futures):
-            if likes_sent >= 100:
-                break
-            uid, token = futures[future]
-            res = future.result()
-            if res["status_code"] == 200 and res["response_text"].strip() == "":
-                with lock:
-                    likes_sent += 1
-                    results.append(res)
-            else:
-                failed.append(res)
+        with ThreadPoolExecutor(max_workers=100) as executor:
+            futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
+                       for uid, token in token_items}
+            for future in as_completed(futures):
+                if likes_sent >= 100:
+                    break
+                uid, token = futures[future]
+                res = future.result()
+                if res["status_code"] == 200 and res["response_text"].strip() == "":
+                    with lock:
+                        likes_sent += 1
+                        results.append(res)
+                else:
+                    failed.append(res)
 
     last_sent_cache[player_id_int] = now
 
@@ -166,13 +166,9 @@ def send_like():
 
     likes_added = likes_after - likes_before  # الفرق الفعلي
 
-    # إذا لم يزداد شيء، إرجاع رسالة خطأ
-    if likes_added == 0:
-        return jsonify({"error": "لم يتم إضافة أي لايك ✅"}), 200
-
     message = None
-    if likes_added < 150:
-        message = f"تم إرسال {likes_added} لايك فقط من أصل 150."
+    if likes_added < 100:
+        message = f"تم إرسال {likes_added} لايك فقط من أصل 100."
 
     return jsonify({
         "player_id": player_uid,
