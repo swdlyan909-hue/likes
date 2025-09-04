@@ -142,7 +142,7 @@ def send_like():
         futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                    for uid, token in token_items}
         for future in as_completed(futures):
-            if likes_sent >= 120:
+            if likes_sent >= 400:
                 break
             uid, token = futures[future]
             res = future.result()
