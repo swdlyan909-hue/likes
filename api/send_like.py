@@ -102,8 +102,6 @@ def send_like():
 
     now = time.time()
     last_sent = last_sent_cache.get(player_id_int, 0)
-    if now - last_sent < 86400:
-        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
 
     # جلب معلومات اللاعب قبل الإرسال
     try:
@@ -117,6 +115,10 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Error fetching player info: {e}"}), 500
 
+    # منع الإرسال إذا تم خلال 24 ساعة
+    if now - last_sent < 86400:
+        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
+
     encrypted_id = Encrypt_ID(player_uid)
     encrypted_api_data = encrypt_api(f"08{encrypted_id}1007")
     TARGET = bytes.fromhex(encrypted_api_data)
@@ -125,7 +127,7 @@ def send_like():
     results = []
     failed = []
 
-    # ✅ جلب 200 توكن عشوائي
+    # جلب 200 توكن عشوائي
     try:
         token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
         tokens_dict = token_data.get("tokens", {})
@@ -135,7 +137,7 @@ def send_like():
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-    # ✅ إرسال لايكات حتى نصل 150 نجاح
+    # إرسال لايكات حتى نصل 150 نجاح
     with ThreadPoolExecutor(max_workers=200) as executor:
         futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                    for uid, token in token_items}
@@ -162,8 +164,9 @@ def send_like():
     except Exception:
         likes_after = likes_before
 
-    likes_added = likes_after - likes_before  # الفرق الفعلي بين بعد و قبل
+    likes_added = likes_after - likes_before  # الفرق الفعلي
 
+    # إذا لم يزداد شيء، إرجاع رسالة خطأ
     if likes_added == 0:
         return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
 
