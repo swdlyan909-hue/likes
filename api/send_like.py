@@ -153,6 +153,22 @@ def send_like():
                 else:
                     failed.append(res)
 
+        # إذا لم يتم إضافة أي لايك بعد جلب التوكنات، نخرج لتجنب حلقة لا نهائية
+        if likes_sent == 0 and len(failed) >= len(token_items):
+            message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
+            last_sent_cache[player_id_int] = now
+            return jsonify({
+                "player_id": player_uid,
+                "player_name": player_name,
+                "likes_before": likes_before,
+                "likes_added": likes_sent,
+                "likes_after": likes_before,
+                "seconds_until_next_allowed": 86400,
+                "message": message,
+                "success_tokens": results,
+                "failed_tokens": failed
+            })
+
     last_sent_cache[player_id_int] = now
 
     # جلب معلومات اللاعب بعد الإرسال
@@ -166,9 +182,13 @@ def send_like():
 
     likes_added = likes_after - likes_before  # الفرق الفعلي
 
-    message = None
-    if likes_added < 100:
+    # تحديد الرسالة النهائية
+    if likes_added == 0:
+        message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
+    elif likes_added < 100:
         message = f"تم إرسال {likes_added} لايك فقط من أصل 100."
+    else:
+        message = None
 
     return jsonify({
         "player_id": player_uid,
