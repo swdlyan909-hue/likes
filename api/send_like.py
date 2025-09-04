@@ -134,15 +134,15 @@ def send_like():
             tokens_dict = token_data.get("tokens", {})
             token_items = list(tokens_dict.items())
             random.shuffle(token_items)
-            token_items = token_items[:100]  # 100 توكن جديدة في كل دورة
+            token_items = token_items[:120]  # 100 توكن جديدة في كل دورة
         except Exception as e:
             return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-        with ThreadPoolExecutor(max_workers=100) as executor:
+        with ThreadPoolExecutor(max_workers=120) as executor:
             futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                        for uid, token in token_items}
             for future in as_completed(futures):
-                if likes_sent >= 100:
+                if likes_sent >= 120:
                     break
                 uid, token = futures[future]
                 res = future.result()
@@ -153,25 +153,10 @@ def send_like():
                 else:
                     failed.append(res)
 
-        # إذا لم يتم إضافة أي لايك بعد جلب التوكنات، نخرج لتجنب حلقة لا نهائية
-        if likes_sent == 0 and len(failed) >= len(token_items):
-            message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
-            last_sent_cache[player_id_int] = now
-            return jsonify({
-                "player_id": player_uid,
-                "player_name": player_name,
-                "likes_before": likes_before,
-                "likes_added": likes_sent,
-                "likes_after": likes_before,
-                "seconds_until_next_allowed": 86400,
-                "message": message,
-                "success_tokens": results,
-                "failed_tokens": failed
-            })
-
     last_sent_cache[player_id_int] = now
 
     # جلب معلومات اللاعب بعد الإرسال
+    likes_after = likes_before
     try:
         resp = httpx.get(info_url, timeout=10)
         info_json = resp.json()
@@ -182,7 +167,7 @@ def send_like():
 
     likes_added = likes_after - likes_before  # الفرق الفعلي
 
-    # تحديد الرسالة النهائية
+    # الرسالة بعد حساب الفرق الفعلي
     if likes_added == 0:
         message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
     elif likes_added < 100:
