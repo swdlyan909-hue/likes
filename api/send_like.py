@@ -153,19 +153,29 @@ def send_like():
                 failed.append(res)
 
     last_sent_cache[player_id_int] = now
-    likes_after = likes_before + likes_sent
+
+    # جلب معلومات اللاعب بعد الإرسال
+    try:
+        resp = httpx.get(info_url, timeout=10)
+        info_json = resp.json()
+        account_info = info_json.get("AccountInfo", {})
+        likes_after = account_info.get("AccountLikes", likes_before)
+    except Exception:
+        likes_after = likes_before
+
+    likes_added = likes_after - likes_before  # الفرق الفعلي بين بعد و قبل
 
     message = None
-    if likes_sent == 0:
+    if likes_added == 0:
         message = "لقد وصل الحساب للحد اليومي."
-    elif likes_sent < 120:
-        message = f"تم إرسال {likes_sent} لايك فقط من أصل 120."
+    elif likes_added < 120:
+        message = f"تم إرسال {likes_added} لايك فقط من أصل 120."
 
     return jsonify({
         "player_id": player_uid,
         "player_name": player_name,
         "likes_before": likes_before,
-        "likes_added": likes_sent,
+        "likes_added": likes_added,
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
         "message": message,
