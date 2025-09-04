@@ -133,12 +133,12 @@ def send_like():
         tokens_dict = token_data.get("tokens", {})
         token_items = list(tokens_dict.items())
         random.shuffle(token_items)
-        token_items = token_items[:2000]
+        token_items = token_items[:400]
     except Exception as e:
         return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
     # إرسال لايكات حتى نصل 150 نجاح فعلي
-    with ThreadPoolExecutor(max_workers=300) as executor:
+    with ThreadPoolExecutor(max_workers=100) as executor:
         futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                    for uid, token in token_items}
         for future in as_completed(futures):
