@@ -167,11 +167,11 @@ def send_like():
 
     likes_added = likes_after - likes_before  # الفرق الفعلي
 
-    # الرسالة بعد حساب الفرق الفعلي
-    message = None
+    # إذا لم يزد اللايكات، نعتبره وصول للحد اليومي
     if likes_added == 0:
-        message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
+        return jsonify({"error": "لقد اضفت لايكات قبل 24 ساعة ✅"}), 200
 
+    # إذا تم إضافة لايكات، نعرض النتائج العادية
     return jsonify({
         "player_id": player_uid,
         "player_name": player_name,
@@ -179,7 +179,6 @@ def send_like():
         "likes_added": likes_added,
         "likes_after": likes_after,
         "seconds_until_next_allowed": 86400,
-        "message": message,
         "success_tokens": results,
         "failed_tokens": failed
     })
