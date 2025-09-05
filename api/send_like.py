@@ -168,12 +168,9 @@ def send_like():
     likes_added = likes_after - likes_before  # الفرق الفعلي
 
     # الرسالة بعد حساب الفرق الفعلي
+    message = None
     if likes_added == 0:
         message = "تم الوصول للحد اليومي، حاول بعد 24 ساعة ✅"
-    elif likes_added < 100:
-        message = f"تم إرسال {likes_added} لايك فقط من أصل 100."
-    else:
-        message = None
 
     return jsonify({
         "player_id": player_uid,
