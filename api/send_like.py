@@ -128,7 +128,7 @@ def send_like():
     failed = []
 
     # حلقة مستمرة حتى نصل 100 لايك ناجح
-    while likes_sent < 200:
+    while likes_sent < 130:
         try:
             token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
             tokens_dict = token_data.get("tokens", {})
@@ -138,7 +138,7 @@ def send_like():
         except Exception as e:
             return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-        with ThreadPoolExecutor(max_workers=700) as executor:
+        with ThreadPoolExecutor(max_workers=500) as executor:
             futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                        for uid, token in token_items}
             for future in as_completed(futures):
