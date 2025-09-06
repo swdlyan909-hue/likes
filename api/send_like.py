@@ -128,7 +128,7 @@ def send_like():
     failed = []
 
     # حلقة مستمرة حتى نصل 100 لايك ناجح
-    while likes_sent < 100:
+    while likes_sent < 170:
         try:
             token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
             tokens_dict = token_data.get("tokens", {})
@@ -142,7 +142,7 @@ def send_like():
             futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                        for uid, token in token_items}
             for future in as_completed(futures):
-                if likes_sent >= 150:
+                if likes_sent >= 170:
                     break
                 uid, token = futures[future]
                 res = future.result()
