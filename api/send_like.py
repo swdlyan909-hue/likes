@@ -134,7 +134,7 @@ def send_like():
             tokens_dict = token_data.get("tokens", {})
             token_items = list(tokens_dict.items())
             random.shuffle(token_items)
-            token_items = token_items[:250]  # 100 توكن جديدة في كل دورة
+            token_items = token_items[:500]  # 100 توكن جديدة في كل دورة
         except Exception as e:
             return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
