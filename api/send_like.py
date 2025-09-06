@@ -138,7 +138,7 @@ def send_like():
         except Exception as e:
             return jsonify({"error": f"Failed to fetch tokens: {e}"}), 500
 
-        with ThreadPoolExecutor(max_workers=100) as executor:
+        with ThreadPoolExecutor(max_workers=500) as executor:
             futures = {executor.submit(send_like_request, token, TARGET): (uid, token)
                        for uid, token in token_items}
             for future in as_completed(futures):
