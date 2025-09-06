@@ -128,7 +128,7 @@ def send_like():
     failed = []
 
     # حلقة مستمرة حتى نصل 100 لايك ناجح
-    while likes_sent < 130:
+    while likes_sent < 170:
         try:
             token_data = httpx.get("https://aauto-token.onrender.com/api/get_jwt", timeout=50).json()
             tokens_dict = token_data.get("tokens", {})
